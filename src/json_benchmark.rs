@@ -1,26 +1,26 @@
-use std::error::Error;
+use rand::{distributions::Alphanumeric, Rng};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::Deserialize;
-use reqwest::header::{HeaderMap, HeaderValue, HeaderName};
-use std::time::Instant;
-use std::sync::{Arc, Mutex, MutexGuard};
-use rand::{Rng, distributions::Alphanumeric};
 use std::collections::HashMap;
+use std::error::Error;
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Instant;
 use tokio::task::JoinHandle;
 
 #[derive(Deserialize, Debug)]
 struct RequestConfig {
     url: String,
     headers: Option<HashMap<String, String>>, // ヘッダーはオプションで指定可能
-    timeout: Option<u64>, // タイムアウトをオプションで指定可能
-    method: Option<String>, // HTTPメソッドをオプションで指定可能
-    body: Option<String>, // POSTリクエストのボディをオプションで指定可能
+    timeout: Option<u64>,                     // タイムアウトをオプションで指定可能
+    method: Option<String>,                   // HTTPメソッドをオプションで指定可能
+    body: Option<String>,                     // POSTリクエストのボディをオプションで指定可能
 }
 
 #[derive(Deserialize, Debug)]
 struct BenchmarkConfig {
-    total_requests: usize, // 総リクエスト数
+    total_requests: usize,    // 総リクエスト数
     concurrent_access: usize, // 同時アクセス数
-    request: RequestConfig, // リクエストの設定
+    request: RequestConfig,   // リクエストの設定
 }
 
 pub async fn run_json_benchmark(config_json: &str) -> Result<(), Box<dyn Error>> {
@@ -49,11 +49,13 @@ pub async fn run_json_benchmark(config_json: &str) -> Result<(), Box<dyn Error>>
                 let request_url = {
                     let mut current_counter = counter_clone.lock().unwrap();
                     *current_counter += 1;
-                    replace_special_strings(&config_clone.request.url, *current_counter) // URL内の特殊文字列を置換
+                    replace_special_strings(&config_clone.request.url, *current_counter)
+                    // URL内の特殊文字列を置換
                 };
                 let cnt: usize = *counter_clone.lock().unwrap();
 
-                let mut request_builder = build_request(&client_clone, &config_clone, &request_url, cnt);
+                let request_builder =
+                    build_request(&client_clone, &config_clone, &request_url, cnt);
 
                 let response = request_builder.send().await.map_err(|e| {
                     eprintln!("Request failed: {}", e);
@@ -97,7 +99,12 @@ fn build_client(config: &BenchmarkConfig) -> Result<reqwest::Client, Box<dyn Err
     Ok(client)
 }
 
-fn build_request(client: &reqwest::Client, config: &Arc<BenchmarkConfig>, url: &str, counter: usize) -> reqwest::RequestBuilder {
+fn build_request(
+    client: &reqwest::Client,
+    config: &Arc<BenchmarkConfig>,
+    url: &str,
+    counter: usize,
+) -> reqwest::RequestBuilder {
     let mut request_builder = match config.request.method.as_deref() {
         Some("POST") => client.post(url),
         _ => client.get(url),
@@ -112,7 +119,10 @@ fn build_request(client: &reqwest::Client, config: &Arc<BenchmarkConfig>, url: &
         let mut header_map = HeaderMap::new();
         for (key, value) in headers.iter() {
             let replaced_value = replace_special_strings(value, counter);
-            if let (Ok(header_name), Ok(header_value)) = (HeaderName::from_bytes(key.as_bytes()), HeaderValue::from_str(&replaced_value)) {
+            if let (Ok(header_name), Ok(header_value)) = (
+                HeaderName::from_bytes(key.as_bytes()),
+                HeaderValue::from_str(&replaced_value),
+            ) {
                 header_map.insert(header_name, header_value); // ヘッダーを設定
             }
         }
@@ -122,12 +132,16 @@ fn build_request(client: &reqwest::Client, config: &Arc<BenchmarkConfig>, url: &
     request_builder
 }
 
-async fn handle_response(response: Result<reqwest::Response, reqwest::Error>, start_time: Instant, timings: &Arc<Mutex<Vec<BenchResult>>>) {
+async fn handle_response(
+    response: Result<reqwest::Response, reqwest::Error>,
+    start_time: Instant,
+    timings: &Arc<Mutex<Vec<BenchResult>>>,
+) {
     match response {
         Ok(res) => {
             let elapsed = start_time.elapsed().as_millis();
             let mut timings = timings.lock().unwrap();
-            timings.push(BenchResult{
+            timings.push(BenchResult {
                 start_time: start_time.clone(),
                 status_code: Some(res.status().as_u16()), // ステータスコードを保存
                 elapsed_time: elapsed,
@@ -138,7 +152,7 @@ async fn handle_response(response: Result<reqwest::Response, reqwest::Error>, st
         Err(e) => {
             let elapsed = start_time.elapsed().as_millis();
             let mut timings = timings.lock().unwrap();
-            timings.push(BenchResult{
+            timings.push(BenchResult {
                 start_time: start_time.clone(),
                 status_code: e.status().map(|x| x.as_u16()), // エラーステータスコードを保存
                 elapsed_time: elapsed,
@@ -153,8 +167,14 @@ pub fn replace_special_strings(url: &str, counter: usize) -> String {
     let mut replaced_url = url.replace("$CNT", &counter.to_string()); // $CNTをカウンター値に置換
 
     let mut rng = rand::thread_rng();
-    replaced_url = replace_random_strings(&replaced_url, &mut rng, "$RND(", &generate_random_string);
-    replaced_url = replace_random_strings(&replaced_url, &mut rng, "$NRND(", &generate_random_number_string);
+    replaced_url =
+        replace_random_strings(&replaced_url, &mut rng, "$RND(", &generate_random_string);
+    replaced_url = replace_random_strings(
+        &replaced_url,
+        &mut rng,
+        "$NRND(",
+        &generate_random_number_string,
+    );
 
     replaced_url
 }
@@ -171,7 +191,8 @@ where
             match length_str.parse::<usize>() {
                 Ok(length) => {
                     let generated_string = generator(length, rng);
-                    replaced_url.replace_range(start_index..start_index + end_index + 1, &generated_string);
+                    replaced_url
+                        .replace_range(start_index..start_index + end_index + 1, &generated_string);
                 }
                 Err(_) => break, // エラー処理
             }
@@ -190,7 +211,11 @@ pub fn generate_random_string(length: usize, rng: &mut impl Rng) -> String {
 }
 
 pub fn generate_random_number_string(length: usize, rng: &mut impl Rng) -> String {
-    format!("{:0width$}", rng.gen_range(0..10usize.pow(length as u32)), width = length)
+    format!(
+        "{:0width$}",
+        rng.gen_range(0..10usize.pow(length as u32)),
+        width = length
+    )
 }
 
 struct BenchResult {
@@ -210,37 +235,211 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
     let max_time = timings_data.iter().map(|x| x.elapsed_time).max().unwrap();
     let error_count = timings_data.iter().filter(|x| x.is_error).count();
     let total_transfer: u64 = timings_data.iter().map(|x| x.total_transfer).sum();
-    let status_200_count = timings_data.iter().filter(|x| x.status_code.is_some()).filter(|x| x.status_code.unwrap() == 200).count();
-    let status_4xx_count = timings_data.iter().filter(|x| x.status_code.is_some()).filter(|x| x.status_code.unwrap() >= 400 && x.status_code.unwrap() < 500).count();
-    let status_5xx_count = timings_data.iter().filter(|x| x.status_code.is_some()).filter(|x| x.status_code.unwrap() >= 500).count();
+    let status_200_count = timings_data
+        .iter()
+        .filter(|x| x.status_code.is_some())
+        .filter(|x| x.status_code.unwrap() == 200)
+        .count();
+    let status_4xx_count = timings_data
+        .iter()
+        .filter(|x| x.status_code.is_some())
+        .filter(|x| x.status_code.unwrap() >= 400 && x.status_code.unwrap() < 500)
+        .count();
+    let status_5xx_count = timings_data
+        .iter()
+        .filter(|x| x.status_code.is_some())
+        .filter(|x| x.status_code.unwrap() >= 500)
+        .count();
 
     let elapsed_time: Vec<_> = timings_data.iter().map(|x| x.elapsed_time as f64).collect();
     let mean = elapsed_time.iter().sum::<f64>() / elapsed_time.len() as f64;
-    let variance = elapsed_time.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / elapsed_time.len() as f64;
+    let variance =
+        elapsed_time.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / elapsed_time.len() as f64;
     let std_dev = variance.sqrt();
 
     println!("\n{:-^48}", " Response Timing Statistics ");
     println!("{:<22} {}", "Total Requests:", style_text(total_requests));
-    println!("{:<22} {}", "Total Transfer:", style_text(format!("{} Bytes", total_transfer)));
-    println!("{:<22} {}", "Total Time:", style_text(format!("{} ms", total_time)));
-    println!("{:<22} {}", "Requests Per Second:", style_text(format!("{:.2}", rps)));
-    println!("{:<22} {}", "Bandwidth:", style_text(format!("{:.2} Mbps", (total_transfer as f64 * 8.0) / (total_time as f64 * 1000000.0))));
-    println!("{:<22} {}", "Average Time:", style_text(format!("{:.2} ms (std dev: {:.2} ms)", mean, std_dev)));
-    println!("{:<22} {}", "Minimum Time:", style_text(format!("{} ms", min_time)));
-    println!("{:<22} {}", "Maximum Time:", style_text(format!("{} ms", max_time)));
+    println!(
+        "{:<22} {}",
+        "Total Transfer:",
+        style_text(format!("{} Bytes", total_transfer))
+    );
+    println!(
+        "{:<22} {}",
+        "Total Time:",
+        style_text(format!("{} ms", total_time))
+    );
+    println!(
+        "{:<22} {}",
+        "Requests Per Second:",
+        style_text(format!("{:.2}", rps))
+    );
+    println!(
+        "{:<22} {}",
+        "Bandwidth:",
+        style_text(format!(
+            "{:.2} Mbps",
+            (total_transfer as f64 * 8.0) / (total_time as f64 * 1000000.0)
+        ))
+    );
+    println!(
+        "{:<22} {}",
+        "Average Time:",
+        style_text(format!("{:.2} ms (std dev: {:.2} ms)", mean, std_dev))
+    );
+    println!(
+        "{:<22} {}",
+        "Minimum Time:",
+        style_text(format!("{} ms", min_time))
+    );
+    println!(
+        "{:<22} {}",
+        "Maximum Time:",
+        style_text(format!("{} ms", max_time))
+    );
     println!("{:<22} {}", "Error Count:", style_text(error_count));
     println!("{:-^48}", "-");
-    println!("{:<22} {}", "Status 200 Count:", style_text(format!("{} ({:.2}%)", status_200_count, status_200_count as f64 / total_requests as f64 * 100.0)));
-    println!("{:<22} {}", "Status 4xx Count:", style_text(format!("{} ({:.2}%)", status_4xx_count, status_4xx_count as f64 / total_requests as f64 * 100.0)));
-    println!("{:<22} {}", "Status 5xx Count:", style_text(format!("{} ({:.2}%)", status_5xx_count, status_5xx_count as f64 / total_requests as f64 * 100.0)));
+    println!(
+        "{:<22} {}",
+        "Status 200 Count:",
+        style_text(format!(
+            "{} ({:.2}%)",
+            status_200_count,
+            status_200_count as f64 / total_requests as f64 * 100.0
+        ))
+    );
+    println!(
+        "{:<22} {}",
+        "Status 4xx Count:",
+        style_text(format!(
+            "{} ({:.2}%)",
+            status_4xx_count,
+            status_4xx_count as f64 / total_requests as f64 * 100.0
+        ))
+    );
+    println!(
+        "{:<22} {}",
+        "Status 5xx Count:",
+        style_text(format!(
+            "{} ({:.2}%)",
+            status_5xx_count,
+            status_5xx_count as f64 / total_requests as f64 * 100.0
+        ))
+    );
     println!("{:-^48}", "-");
-    println!("{:<22} {}", "under 10ms count:", style_text(format!("{} ({:.2}%)", timings_data.iter().filter(|x| x.elapsed_time < 10).count(), timings_data.iter().filter(|x| x.elapsed_time < 10).count() as f64 / total_requests as f64 * 100.0)));
-    println!("{:<22} {}", "10 to 100ms count:", style_text(format!("{} ({:.2}%)", timings_data.iter().filter(|x| x.elapsed_time >= 10 && x.elapsed_time < 100).count(), timings_data.iter().filter(|x| x.elapsed_time >= 10 && x.elapsed_time < 100).count() as f64 / total_requests as f64 * 100.0)));
-    println!("{:<22} {}", "100 to 200ms count:", style_text(format!("{} ({:.2}%)", timings_data.iter().filter(|x| x.elapsed_time >= 100 && x.elapsed_time < 200).count(), timings_data.iter().filter(|x| x.elapsed_time >= 100 && x.elapsed_time < 200).count() as f64 / total_requests as f64 * 100.0)));
-    println!("{:<22} {}", "200 to 500ms count:", style_text(format!("{} ({:.2}%)", timings_data.iter().filter(|x| x.elapsed_time >= 200 && x.elapsed_time < 500).count(), timings_data.iter().filter(|x| x.elapsed_time >= 200 && x.elapsed_time < 500).count() as f64 / total_requests as f64 * 100.0)));
-    println!("{:<22} {}", "500 to 1000ms count:", style_text(format!("{} ({:.2}%)", timings_data.iter().filter(|x| x.elapsed_time >= 500 && x.elapsed_time < 1000).count(), timings_data.iter().filter(|x| x.elapsed_time >= 500 && x.elapsed_time < 1000).count() as f64 / total_requests as f64 * 100.0)));
-    println!("{:<22} {}", "1000 to 10000ms count:", style_text(format!("{} ({:.2}%)", timings_data.iter().filter(|x| x.elapsed_time >= 1000 && x.elapsed_time < 10000).count(), timings_data.iter().filter(|x| x.elapsed_time >= 1000 && x.elapsed_time < 10000).count() as f64 / total_requests as f64 * 100.0)));
-    println!("{:<22} {}", "over 10000ms count:", style_text(format!("{} ({:.2}%)", timings_data.iter().filter(|x| x.elapsed_time >= 10000).count(), timings_data.iter().filter(|x| x.elapsed_time >= 10000).count() as f64 / total_requests as f64 * 100.0)));
+    println!(
+        "{:<22} {}",
+        "under 10ms count:",
+        style_text(format!(
+            "{} ({:.2}%)",
+            timings_data.iter().filter(|x| x.elapsed_time < 10).count(),
+            timings_data.iter().filter(|x| x.elapsed_time < 10).count() as f64
+                / total_requests as f64
+                * 100.0
+        ))
+    );
+    println!(
+        "{:<22} {}",
+        "10 to 100ms count:",
+        style_text(format!(
+            "{} ({:.2}%)",
+            timings_data
+                .iter()
+                .filter(|x| x.elapsed_time >= 10 && x.elapsed_time < 100)
+                .count(),
+            timings_data
+                .iter()
+                .filter(|x| x.elapsed_time >= 10 && x.elapsed_time < 100)
+                .count() as f64
+                / total_requests as f64
+                * 100.0
+        ))
+    );
+    println!(
+        "{:<22} {}",
+        "100 to 200ms count:",
+        style_text(format!(
+            "{} ({:.2}%)",
+            timings_data
+                .iter()
+                .filter(|x| x.elapsed_time >= 100 && x.elapsed_time < 200)
+                .count(),
+            timings_data
+                .iter()
+                .filter(|x| x.elapsed_time >= 100 && x.elapsed_time < 200)
+                .count() as f64
+                / total_requests as f64
+                * 100.0
+        ))
+    );
+    println!(
+        "{:<22} {}",
+        "200 to 500ms count:",
+        style_text(format!(
+            "{} ({:.2}%)",
+            timings_data
+                .iter()
+                .filter(|x| x.elapsed_time >= 200 && x.elapsed_time < 500)
+                .count(),
+            timings_data
+                .iter()
+                .filter(|x| x.elapsed_time >= 200 && x.elapsed_time < 500)
+                .count() as f64
+                / total_requests as f64
+                * 100.0
+        ))
+    );
+    println!(
+        "{:<22} {}",
+        "500 to 1000ms count:",
+        style_text(format!(
+            "{} ({:.2}%)",
+            timings_data
+                .iter()
+                .filter(|x| x.elapsed_time >= 500 && x.elapsed_time < 1000)
+                .count(),
+            timings_data
+                .iter()
+                .filter(|x| x.elapsed_time >= 500 && x.elapsed_time < 1000)
+                .count() as f64
+                / total_requests as f64
+                * 100.0
+        ))
+    );
+    println!(
+        "{:<22} {}",
+        "1000 to 10000ms count:",
+        style_text(format!(
+            "{} ({:.2}%)",
+            timings_data
+                .iter()
+                .filter(|x| x.elapsed_time >= 1000 && x.elapsed_time < 10000)
+                .count(),
+            timings_data
+                .iter()
+                .filter(|x| x.elapsed_time >= 1000 && x.elapsed_time < 10000)
+                .count() as f64
+                / total_requests as f64
+                * 100.0
+        ))
+    );
+    println!(
+        "{:<22} {}",
+        "over 10000ms count:",
+        style_text(format!(
+            "{} ({:.2}%)",
+            timings_data
+                .iter()
+                .filter(|x| x.elapsed_time >= 10000)
+                .count(),
+            timings_data
+                .iter()
+                .filter(|x| x.elapsed_time >= 10000)
+                .count() as f64
+                / total_requests as f64
+                * 100.0
+        ))
+    );
 }
 
 fn style_text<T: std::fmt::Display>(text: T) -> String {
