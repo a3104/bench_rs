@@ -28,10 +28,10 @@ Navigate to the project directory:
 The program takes four arguments:
 
 1. `url`: The URL to which the requests will be sent.
-    1. {C} : repladed Sequentially with the count of the request threadsId_count
+    1. {C} : replaced sequentially with the count of the request threadsId_count
 2. `threads`: The number of threads to use for sending requests.
 3. `count per threads`: The number of requests each thread will send.
-4. `is_logging`: A boolean value indicating whether to log errors. set true / false
+4. `is_logging`: A boolean value indicating whether to log errors. Set to true or false.
 
 Here is an example of how to run the program:
 
@@ -42,7 +42,7 @@ cargo run "http://example.com" 10 100 false
 This will start the program with 10 threads, each sending 100 requests to "http://example.com", and errors will be
 logged.
 
-# Console output  example
+# Console output example
 
 ```
 --- Request Timing Statistics ---
@@ -69,6 +69,67 @@ between 1000 to 10000ms count 0 0 %
 over 10000ms count 0 0 %
 ```
 
+## JSON Benchmark Configuration
+
+To use `json_bench`, you need a configuration file in JSON format as shown below.
+
+```json
+{
+  "total_requests": 1000,
+  "concurrent_access": 10,
+  "request": {
+    "url": "http://example.com",
+    "headers": {
+      "Authorization": "Bearer YOUR_TOKEN"
+    },
+    "timeout": 5,
+    "method": "GET",
+    "body": null
+  }
+}
+```
+
+- `total_requests`: The total number of requests to send.
+- `concurrent_access`: The number of concurrent threads to use.
+- `request.url`: The URL to send the requests to.
+- `request.headers`: Headers to include in the request (optional).
+- `request.timeout`: Timeout for the request in seconds (optional).
+- `request.method`: HTTP method to use (optional, default is GET).
+- `request.body`: Body for POST requests (optional).
+
+### Special Variables
+
+You can use special variables in the `url` field to dynamically generate parts of the URL:
+
+- `$CNT`: Replaced with the current request count.
+- `$RND(n)`: Replaced with a random alphanumeric string of length `n`.
+- `$NRND(n)`: Replaced with a random numeric string of length `n`.
+
+Example:
+
+```json
+{
+  "total_requests": 1000,
+  "concurrent_access": 10,
+  "request": {
+    "url": "http://example.com/$CNT/$RND(5)/$NRND(3)",
+    "headers": {
+      "Authorization": "Bearer YOUR_TOKEN"
+    },
+    "timeout": 5,
+    "method": "GET",
+    "body": null
+  }
+}
+```
+
+After creating the configuration file, run the program as follows:
+
+```bash
+bench_rs json #configfile
+```
+
+This will execute the benchmark based on the configuration file.
 
 ## License
 

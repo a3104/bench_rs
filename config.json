@@ -1,0 +1,28 @@
+{
+  "total_requests": 100,
+  "concurrent_access": 10,
+  "request": {
+    "url": "http://localhost/api/get_data?cnt=$CNT&userid=$RND(5)&code=$NRND(3)",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "timeout": 5,
+    "method": "GET"
+  }
+}
+
+  
+ {
+  "total_requests": 100,
+  "concurrent_access": 10,
+  "request": {
+    "url": "http://example.com/api/post_data/$CNT",
+    "headers": {
+      "Content-Type": "application/json"
+      "Cokie": "sessionid=$RND(5);"
+    },
+    "timeout": 5,
+    "method": "POST",
+    "body": "{ \"key\": \"value_$RND(5)\" }"
+  }
+}
