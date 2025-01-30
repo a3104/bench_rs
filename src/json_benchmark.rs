@@ -16,7 +16,6 @@ struct RequestConfig {
     body: Option<String>, // POSTリクエストのボディをオプションで指定可能
 }
 
-
 #[derive(Deserialize, Debug)]
 struct BenchmarkConfig {
     total_requests: usize, // 総リクエスト数
@@ -34,16 +33,7 @@ pub async fn run_json_benchmark(config_json: &str) -> Result<(), Box<dyn Error>>
     let timings = Arc::new(Mutex::new(Vec::<BenchResult>::new())); // ベンチマーク結果を保存するための共有ベクター
     let counter = Arc::new(Mutex::new(0)); // リクエストカウンター
 
-    let client_builder = reqwest::Client::builder();
-    let client_builder = if let Some(timeout) = config.request.timeout {
-        client_builder.timeout(std::time::Duration::from_secs(timeout))
-    } else {
-        client_builder.timeout(std::time::Duration::from_secs(5)) // デフォルトのタイムアウトを5秒に設定
-    };
-    let client = client_builder.build().map_err(|e| {
-            eprintln!("Failed to build client: {}", e);
-            e
-        })?;
+    let client = build_client(&config)?;
 
     let mut handles: Vec<JoinHandle<()>> = vec![];
     let config_arc = Arc::new(config);
@@ -61,55 +51,16 @@ pub async fn run_json_benchmark(config_json: &str) -> Result<(), Box<dyn Error>>
                     *current_counter += 1;
                     replace_special_strings(&config_clone.request.url, *current_counter) // URL内の特殊文字列を置換
                 };
+                let cnt: usize = *counter_clone.lock().unwrap();
 
-                let mut request_builder = match config_clone.request.method.as_deref() {
-                    Some("POST") => client_clone.post(&request_url),
-                    _ => client_clone.get(&request_url),
-                };
-
-                if let Some(body) = &config_clone.request.body {
-                    request_builder = request_builder.body(body.clone());
-                }
-
-                if let Some(headers) = &config_clone.request.headers {
-                    let mut header_map = HeaderMap::new();
-                    for (key, value) in headers.iter() {
-                        if let (Ok(header_name), Ok(header_value)) = (HeaderName::from_bytes(key.as_bytes()), HeaderValue::from_str(value)) {
-                            header_map.insert(header_name, header_value); // ヘッダーを設定
-                        }
-                    }
-                    request_builder = request_builder.headers(header_map);
-                }
+                let mut request_builder = build_request(&client_clone, &config_clone, &request_url, cnt);
 
                 let response = request_builder.send().await.map_err(|e| {
                     eprintln!("Request failed: {}", e);
                     e
                 });
 
-                match response {
-                    Ok(res) => {
-                        let elapsed = start_time.elapsed().as_millis();
-                        let mut timings = timings_clone.lock().unwrap();
-                        timings.push(BenchResult{
-                            start_time: start_time.clone(),
-                            status_code: Some(res.status().as_u16()), // ステータスコードを保存
-                            elapsed_time: elapsed,
-                            total_transfer: res.content_length().unwrap_or(0), // コンテンツ長を保存
-                            is_error: false,
-                        });
-                    }
-                    Err(e) => {
-                        let elapsed = start_time.elapsed().as_millis();
-                        let mut timings = timings_clone.lock().unwrap();
-                        timings.push(BenchResult{
-                            start_time: start_time.clone(),
-                            status_code: e.status().map(|x| x.as_u16()), // エラーステータスコードを保存
-                            elapsed_time: elapsed,
-                            total_transfer: 0,
-                            is_error: true,
-                        });
-                    }
-                }
+                handle_response(response, start_time, &timings_clone).await;
             }
         });
         handles.push(handle);
@@ -132,6 +83,71 @@ pub async fn run_json_benchmark(config_json: &str) -> Result<(), Box<dyn Error>>
     Ok(())
 }
 
+fn build_client(config: &BenchmarkConfig) -> Result<reqwest::Client, Box<dyn Error>> {
+    let client_builder = reqwest::Client::builder();
+    let client_builder = if let Some(timeout) = config.request.timeout {
+        client_builder.timeout(std::time::Duration::from_secs(timeout))
+    } else {
+        client_builder.timeout(std::time::Duration::from_secs(5)) // デフォルトのタイムアウトを5秒に設定
+    };
+    let client = client_builder.build().map_err(|e| {
+        eprintln!("Failed to build client: {}", e);
+        e
+    })?;
+    Ok(client)
+}
+
+fn build_request(client: &reqwest::Client, config: &Arc<BenchmarkConfig>, url: &str, counter: usize) -> reqwest::RequestBuilder {
+    let mut request_builder = match config.request.method.as_deref() {
+        Some("POST") => client.post(url),
+        _ => client.get(url),
+    };
+
+    if let Some(body) = &config.request.body {
+        let replaced_body = replace_special_strings(body, counter);
+        request_builder = request_builder.body(replaced_body);
+    }
+
+    if let Some(headers) = &config.request.headers {
+        let mut header_map = HeaderMap::new();
+        for (key, value) in headers.iter() {
+            let replaced_value = replace_special_strings(value, counter);
+            if let (Ok(header_name), Ok(header_value)) = (HeaderName::from_bytes(key.as_bytes()), HeaderValue::from_str(&replaced_value)) {
+                header_map.insert(header_name, header_value); // ヘッダーを設定
+            }
+        }
+        request_builder = request_builder.headers(header_map);
+    }
+
+    request_builder
+}
+
+async fn handle_response(response: Result<reqwest::Response, reqwest::Error>, start_time: Instant, timings: &Arc<Mutex<Vec<BenchResult>>>) {
+    match response {
+        Ok(res) => {
+            let elapsed = start_time.elapsed().as_millis();
+            let mut timings = timings.lock().unwrap();
+            timings.push(BenchResult{
+                start_time: start_time.clone(),
+                status_code: Some(res.status().as_u16()), // ステータスコードを保存
+                elapsed_time: elapsed,
+                total_transfer: res.content_length().unwrap_or(0), // コンテンツ長を保存
+                is_error: false,
+            });
+        }
+        Err(e) => {
+            let elapsed = start_time.elapsed().as_millis();
+            let mut timings = timings.lock().unwrap();
+            timings.push(BenchResult{
+                start_time: start_time.clone(),
+                status_code: e.status().map(|x| x.as_u16()), // エラーステータスコードを保存
+                elapsed_time: elapsed,
+                total_transfer: 0,
+                is_error: true,
+            });
+        }
+    }
+}
 
 pub fn replace_special_strings(url: &str, counter: usize) -> String {
     let mut replaced_url = url.replace("$CNT", &counter.to_string()); // $CNTをカウンター値に置換
@@ -177,7 +193,6 @@ pub fn generate_random_number_string(length: usize, rng: &mut impl Rng) -> Strin
     format!("{:0width$}", rng.gen_range(0..10usize.pow(length as u32)), width = length)
 }
 
-
 struct BenchResult {
     start_time: Instant,
     status_code: Option<u16>,
@@ -185,7 +200,6 @@ struct BenchResult {
     total_transfer: u64,
     is_error: bool,
 }
-
 
 fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
     let minmal_instant = timings_data.iter().map(|x| x.start_time).min().unwrap();
