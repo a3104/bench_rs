@@ -1,9 +1,11 @@
 #[cfg(test)]
 mod tests {
 
+    use crate::json_benchmark::{
+        generate_random_number_string, generate_random_string, replace_random_strings,
+        replace_special_strings,
+    };
     use rand::thread_rng;
-    use crate::json_benchmark::{generate_random_number_string, generate_random_string, replace_random_strings, replace_special_strings};
-
 
     #[test]
     fn test_replace_special_strings() {
@@ -54,7 +56,8 @@ mod tests {
         assert!(result[19..].chars().all(|c| c.is_alphanumeric()));
 
         let url = "http://example.com/$NRND(3)";
-        let result = replace_random_strings(url, &mut rng, "$NRND(", &generate_random_number_string);
+        let result =
+            replace_random_strings(url, &mut rng, "$NRND(", &generate_random_number_string);
         println!("{}", &result);
 
         assert_eq!(result.len(), 22); // 19 + 3 random digits

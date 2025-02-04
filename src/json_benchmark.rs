@@ -159,7 +159,7 @@ async fn handle_response(
                 total_transfer: 0,
                 is_error: true,
             });
-        }
+        } // <-- 追加: Err ブロックの閉じ括弧
     }
 }
 
@@ -226,86 +226,170 @@ struct BenchResult {
     is_error: bool,
 }
 
+struct StatisticsData {
+    total_requests: usize,
+    total_transfer: u64,
+    total_time: u128,
+    rps: f64,
+    min_time: u128,
+    max_time: u128,
+    error_count: usize,
+    status_200_count: usize,
+    status_4xx_count: usize,
+    status_5xx_count: usize,
+    mean: f64,
+    variance: f64,
+    std_dev: f64,
+    under_10ms_count: usize,
+    _10_to_100ms_count: usize,
+    _100_to_200ms_count: usize,
+    _200_to_500ms_count: usize,
+    _500_to_1000ms_count: usize,
+    _1000_to_10000ms_count: usize,
+    over_10000ms_count: usize,
+}
+impl<'a> From<MutexGuard<'a, Vec<BenchResult>>> for StatisticsData {
+    fn from(timings_data: MutexGuard<Vec<BenchResult>>) -> Self {
+        let minmal_instant = timings_data.iter().map(|x| x.start_time).min().unwrap();
+        let total_time = minmal_instant.elapsed().as_millis();
+        let total_requests = timings_data.len();
+        let rps = total_requests as f64 / total_time as f64 * 1000.0; // リクエスト毎秒
+        let min_time = timings_data.iter().map(|x| x.elapsed_time).min().unwrap();
+        let max_time = timings_data.iter().map(|x| x.elapsed_time).max().unwrap();
+        let error_count = timings_data.iter().filter(|x| x.is_error).count();
+        let total_transfer: u64 = timings_data.iter().map(|x| x.total_transfer).sum();
+        let status_200_count = timings_data
+            .iter()
+            .filter(|x| x.status_code.is_some())
+            .filter(|x| x.status_code.unwrap() == 200)
+            .count();
+        let status_4xx_count = timings_data
+            .iter()
+            .filter(|x| x.status_code.is_some())
+            .filter(|x| x.status_code.unwrap() >= 400 && x.status_code.unwrap() < 500)
+            .count();
+        let status_5xx_count = timings_data
+            .iter()
+            .filter(|x| x.status_code.is_some())
+            .filter(|x| x.status_code.unwrap() >= 500)
+            .count();
+
+        let elapsed_time: Vec<_> = timings_data.iter().map(|x| x.elapsed_time as f64).collect();
+        let mean = elapsed_time.iter().sum::<f64>() / elapsed_time.len() as f64;
+        let variance = elapsed_time.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
+            / elapsed_time.len() as f64;
+        let std_dev = variance.sqrt();
+
+        let under_10ms_count = timings_data.iter().filter(|x| x.elapsed_time < 10).count();
+        let _10_to_100ms_count = timings_data
+            .iter()
+            .filter(|x| x.elapsed_time >= 10 && x.elapsed_time < 100)
+            .count();
+
+        let _100_to_200ms_count = timings_data
+            .iter()
+            .filter(|x| x.elapsed_time >= 100 && x.elapsed_time < 200)
+            .count();
+        let _200_to_500ms_count = timings_data
+            .iter()
+            .filter(|x| x.elapsed_time >= 200 && x.elapsed_time < 500)
+            .count();
+        let _500_to_1000ms_count = timings_data
+            .iter()
+            .filter(|x| x.elapsed_time >= 500 && x.elapsed_time < 1000)
+            .count();
+        let _1000_to_10000ms_count = timings_data
+            .iter()
+            .filter(|x| x.elapsed_time >= 1000 && x.elapsed_time < 10000)
+            .count();
+        let over_10000ms_count = timings_data
+            .iter()
+            .filter(|x| x.elapsed_time >= 10000)
+            .count();
+
+        StatisticsData {
+            total_requests,
+            total_transfer,
+            total_time,
+            rps,
+            min_time,
+            max_time,
+            error_count,
+            status_200_count,
+            status_4xx_count,
+            status_5xx_count,
+            mean,
+            variance,
+            std_dev,
+            under_10ms_count,
+            _10_to_100ms_count,
+            _100_to_200ms_count,
+            _200_to_500ms_count,
+            _500_to_1000ms_count,
+            _1000_to_10000ms_count,
+            over_10000ms_count,
+        }
+    }
+}
+
 fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
-    let minmal_instant = timings_data.iter().map(|x| x.start_time).min().unwrap();
-    let total_time = minmal_instant.elapsed().as_millis();
-    let total_requests = timings_data.len();
-    let rps = total_requests as f64 / total_time as f64 * 1000.0; // リクエスト毎秒
-    let min_time = timings_data.iter().map(|x| x.elapsed_time).min().unwrap();
-    let max_time = timings_data.iter().map(|x| x.elapsed_time).max().unwrap();
-    let error_count = timings_data.iter().filter(|x| x.is_error).count();
-    let total_transfer: u64 = timings_data.iter().map(|x| x.total_transfer).sum();
-    let status_200_count = timings_data
-        .iter()
-        .filter(|x| x.status_code.is_some())
-        .filter(|x| x.status_code.unwrap() == 200)
-        .count();
-    let status_4xx_count = timings_data
-        .iter()
-        .filter(|x| x.status_code.is_some())
-        .filter(|x| x.status_code.unwrap() >= 400 && x.status_code.unwrap() < 500)
-        .count();
-    let status_5xx_count = timings_data
-        .iter()
-        .filter(|x| x.status_code.is_some())
-        .filter(|x| x.status_code.unwrap() >= 500)
-        .count();
-
-    let elapsed_time: Vec<_> = timings_data.iter().map(|x| x.elapsed_time as f64).collect();
-    let mean = elapsed_time.iter().sum::<f64>() / elapsed_time.len() as f64;
-    let variance =
-        elapsed_time.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / elapsed_time.len() as f64;
-    let std_dev = variance.sqrt();
-
+    let stats = StatisticsData::from(timings_data);
     println!("\n{:-^48}", " Response Timing Statistics ");
-    println!("{:<22} {}", "Total Requests:", style_text(total_requests));
+    println!(
+        "{:<22} {}",
+        "Total Requests:",
+        style_text(stats.total_requests)
+    );
     println!(
         "{:<22} {}",
         "Total Transfer:",
-        style_text(format!("{} Bytes", total_transfer))
+        style_text(format!("{} Bytes", stats.total_transfer))
     );
     println!(
         "{:<22} {}",
         "Total Time:",
-        style_text(format!("{} ms", total_time))
+        style_text(format!("{} ms", stats.total_time))
     );
     println!(
         "{:<22} {}",
         "Requests Per Second:",
-        style_text(format!("{:.2}", rps))
+        style_text(format!("{:.2}", stats.rps))
     );
     println!(
         "{:<22} {}",
         "Bandwidth:",
         style_text(format!(
             "{:.2} Mbps",
-            (total_transfer as f64 * 8.0) / (total_time as f64 * 1000000.0)
+            (stats.total_transfer as f64 * 8.0) / (stats.total_time as f64 * 1000000.0)
         ))
     );
     println!(
         "{:<22} {}",
         "Average Time:",
-        style_text(format!("{:.2} ms (std dev: {:.2} ms)", mean, std_dev))
+        style_text(format!(
+            "{:.2} ms (std dev: {:.2} ms)",
+            stats.mean, stats.std_dev
+        ))
     );
     println!(
         "{:<22} {}",
         "Minimum Time:",
-        style_text(format!("{} ms", min_time))
+        style_text(format!("{} ms", stats.min_time))
     );
     println!(
         "{:<22} {}",
         "Maximum Time:",
-        style_text(format!("{} ms", max_time))
+        style_text(format!("{} ms", stats.max_time))
     );
-    println!("{:<22} {}", "Error Count:", style_text(error_count));
+    println!("{:<22} {}", "Error Count:", style_text(stats.error_count));
     println!("{:-^48}", "-");
     println!(
         "{:<22} {}",
         "Status 200 Count:",
         style_text(format!(
             "{} ({:.2}%)",
-            status_200_count,
-            status_200_count as f64 / total_requests as f64 * 100.0
+            stats.status_200_count,
+            stats.status_200_count as f64 / stats.total_requests as f64 * 100.0
         ))
     );
     println!(
@@ -313,8 +397,8 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
         "Status 4xx Count:",
         style_text(format!(
             "{} ({:.2}%)",
-            status_4xx_count,
-            status_4xx_count as f64 / total_requests as f64 * 100.0
+            stats.status_4xx_count,
+            stats.status_4xx_count as f64 / stats.total_requests as f64 * 100.0
         ))
     );
     println!(
@@ -322,8 +406,8 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
         "Status 5xx Count:",
         style_text(format!(
             "{} ({:.2}%)",
-            status_5xx_count,
-            status_5xx_count as f64 / total_requests as f64 * 100.0
+            stats.status_5xx_count,
+            stats.status_5xx_count as f64 / stats.total_requests as f64 * 100.0
         ))
     );
     println!("{:-^48}", "-");
@@ -332,10 +416,8 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
         "under 10ms count:",
         style_text(format!(
             "{} ({:.2}%)",
-            timings_data.iter().filter(|x| x.elapsed_time < 10).count(),
-            timings_data.iter().filter(|x| x.elapsed_time < 10).count() as f64
-                / total_requests as f64
-                * 100.0
+            stats.under_10ms_count,
+            stats.under_10ms_count as f64 / stats.total_requests as f64 * 100.0
         ))
     );
     println!(
@@ -343,16 +425,8 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
         "10 to 100ms count:",
         style_text(format!(
             "{} ({:.2}%)",
-            timings_data
-                .iter()
-                .filter(|x| x.elapsed_time >= 10 && x.elapsed_time < 100)
-                .count(),
-            timings_data
-                .iter()
-                .filter(|x| x.elapsed_time >= 10 && x.elapsed_time < 100)
-                .count() as f64
-                / total_requests as f64
-                * 100.0
+            stats._10_to_100ms_count,
+            stats._10_to_100ms_count as f64 / stats.total_requests as f64 * 100.0
         ))
     );
     println!(
@@ -360,16 +434,8 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
         "100 to 200ms count:",
         style_text(format!(
             "{} ({:.2}%)",
-            timings_data
-                .iter()
-                .filter(|x| x.elapsed_time >= 100 && x.elapsed_time < 200)
-                .count(),
-            timings_data
-                .iter()
-                .filter(|x| x.elapsed_time >= 100 && x.elapsed_time < 200)
-                .count() as f64
-                / total_requests as f64
-                * 100.0
+            stats._100_to_200ms_count,
+            stats._100_to_200ms_count as f64 / stats.total_requests as f64 * 100.0
         ))
     );
     println!(
@@ -377,16 +443,8 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
         "200 to 500ms count:",
         style_text(format!(
             "{} ({:.2}%)",
-            timings_data
-                .iter()
-                .filter(|x| x.elapsed_time >= 200 && x.elapsed_time < 500)
-                .count(),
-            timings_data
-                .iter()
-                .filter(|x| x.elapsed_time >= 200 && x.elapsed_time < 500)
-                .count() as f64
-                / total_requests as f64
-                * 100.0
+            stats._200_to_500ms_count,
+            stats._200_to_500ms_count as f64 / stats.total_requests as f64 * 100.0
         ))
     );
     println!(
@@ -394,16 +452,8 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
         "500 to 1000ms count:",
         style_text(format!(
             "{} ({:.2}%)",
-            timings_data
-                .iter()
-                .filter(|x| x.elapsed_time >= 500 && x.elapsed_time < 1000)
-                .count(),
-            timings_data
-                .iter()
-                .filter(|x| x.elapsed_time >= 500 && x.elapsed_time < 1000)
-                .count() as f64
-                / total_requests as f64
-                * 100.0
+            stats._500_to_1000ms_count,
+            stats._500_to_1000ms_count as f64 / stats.total_requests as f64 * 100.0
         ))
     );
     println!(
@@ -411,16 +461,8 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
         "1000 to 10000ms count:",
         style_text(format!(
             "{} ({:.2}%)",
-            timings_data
-                .iter()
-                .filter(|x| x.elapsed_time >= 1000 && x.elapsed_time < 10000)
-                .count(),
-            timings_data
-                .iter()
-                .filter(|x| x.elapsed_time >= 1000 && x.elapsed_time < 10000)
-                .count() as f64
-                / total_requests as f64
-                * 100.0
+            stats._1000_to_10000ms_count,
+            stats._1000_to_10000ms_count as f64 / stats.total_requests as f64 * 100.0
         ))
     );
     println!(
@@ -428,16 +470,8 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
         "over 10000ms count:",
         style_text(format!(
             "{} ({:.2}%)",
-            timings_data
-                .iter()
-                .filter(|x| x.elapsed_time >= 10000)
-                .count(),
-            timings_data
-                .iter()
-                .filter(|x| x.elapsed_time >= 10000)
-                .count() as f64
-                / total_requests as f64
-                * 100.0
+            stats.over_10000ms_count,
+            stats.over_10000ms_count as f64 / stats.total_requests as f64 * 100.0
         ))
     );
 }
