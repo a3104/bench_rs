@@ -1,3 +1,4 @@
+use rand::distributions::Uniform;
 use rand::{distributions::Alphanumeric, Rng};
 use uuid::Uuid;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -164,6 +165,13 @@ async fn handle_response(
     }
 }
 
+pub fn generate_random_hex_string(length: usize, rng: &mut impl Rng) -> String {
+    let hex_chars = Uniform::new_inclusive(0, 15);
+    (0..length)
+        .map(|_| format!("{:X}", rng.sample(&hex_chars)))
+        .collect()
+}
+
 pub fn replace_special_strings(url: &str, counter: usize) -> String {
     let luid = generate_luid();
     let mut replaced_url = url.replace("$CNT", &counter.to_string()); // $CNTをカウンター値に置換
@@ -176,6 +184,12 @@ pub fn replace_special_strings(url: &str, counter: usize) -> String {
         &mut rng,
         "$NRND(",
         &generate_random_number_string,
+    );
+    replaced_url = replace_random_strings(
+        &replaced_url,
+        &mut rng,
+        "$RNDB64(",
+        &generate_random_hex_string,
     );
 
     replaced_url = replaced_url.replace("$LUID", &luid); // $LUIDを生成して置換

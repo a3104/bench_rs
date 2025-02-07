@@ -104,6 +104,8 @@ You can use special variables in the `url` field to dynamically generate parts o
 - `$CNT`: Replaced with the current request count.
 - `$RND(n)`: Replaced with a random alphanumeric string of length `n`.
 - `$NRND(n)`: Replaced with a random numeric string of length `n`.
+- `$LUID`: Replaced with a unique UUID v4 string.
+- `$RNDB64(n)`: Replaced with a random hexadecimal string of length `n`.
 
 Example:
 
