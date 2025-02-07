@@ -1,4 +1,5 @@
 use rand::{distributions::Alphanumeric, Rng};
+use uuid::Uuid;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -164,6 +165,7 @@ async fn handle_response(
 }
 
 pub fn replace_special_strings(url: &str, counter: usize) -> String {
+    let luid = generate_luid();
     let mut replaced_url = url.replace("$CNT", &counter.to_string()); // $CNTをカウンター値に置換
 
     let mut rng = rand::thread_rng();
@@ -176,7 +178,12 @@ pub fn replace_special_strings(url: &str, counter: usize) -> String {
         &generate_random_number_string,
     );
 
+    replaced_url = replaced_url.replace("$LUID", &luid); // $LUIDを生成して置換
     replaced_url
+}
+
+pub fn generate_luid() -> String {
+    Uuid::new_v4().to_string()
 }
 
 pub fn replace_random_strings<F, R>(url: &str, rng: &mut R, pattern: &str, generator: &F) -> String
