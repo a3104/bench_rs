@@ -133,6 +133,19 @@ bench_rs json #configfile
 
 This will execute the benchmark based on the configuration file.
 
+## JSON Benchmark Logging
+
+When a logging path is provided in the JSON configuration (using the "logging" field), the benchmark tool will output the following CSV columns to the specified file:
+
+- URL: The benchmarked URL.
+- Post Body(optional)
+- Status Code: HTTP response status as u16.
+- Is Error: Boolean value indicating if an error occurred.
+- Elapsed Time: The response time in milliseconds.
+- Total Transfer: The total data transferred in bytes.
+
+The logging functionality is implemented in the JSON benchmark module and can be enabled by specifying a valid file path in the JSON config.
+
 ## License
 
 This project is licensed under the MIT License 
