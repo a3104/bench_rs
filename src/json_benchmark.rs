@@ -8,6 +8,8 @@ use std::error::Error;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 use tokio::task::JoinHandle;
+use std::fs::File;
+use std::io::Write;
 
 #[derive(Deserialize, Debug)]
 struct RequestConfig {
@@ -22,6 +24,7 @@ struct RequestConfig {
 struct BenchmarkConfig {
     total_requests: usize,    // 総リクエスト数
     concurrent_access: usize, // 同時アクセス数
+    logging: Option<String>,  // ログ出力先
     request: RequestConfig,   // リクエストの設定
 }
 
@@ -56,7 +59,7 @@ pub async fn run_json_benchmark(config_json: &str) -> Result<(), Box<dyn Error>>
                 };
                 let cnt: usize = *counter_clone.lock().unwrap();
 
-                let request_builder =
+                let (request_builder, body) =
                     build_request(&client_clone, &config_clone, &request_url, cnt);
 
                 let response = request_builder.send().await.map_err(|e| {
@@ -64,7 +67,7 @@ pub async fn run_json_benchmark(config_json: &str) -> Result<(), Box<dyn Error>>
                     e
                 });
 
-                handle_response(response, start_time, &timings_clone).await;
+                handle_response(response, body,start_time, &timings_clone).await;
             }
         });
         handles.push(handle);
@@ -79,7 +82,11 @@ pub async fn run_json_benchmark(config_json: &str) -> Result<(), Box<dyn Error>>
 
     let timings_data = timings.lock().unwrap();
     if !timings_data.is_empty() {
+        if let Some(logging_path) = &config_arc.logging {
+            write_to_csv(logging_path, &timings_data)?;
+        }
         print_statistics(timings_data); // 統計情報を表示
+
     } else {
         println!("No timing data available.");
     }
@@ -106,16 +113,14 @@ fn build_request(
     config: &Arc<BenchmarkConfig>,
     url: &str,
     counter: usize,
-) -> reqwest::RequestBuilder {
+) -> (reqwest::RequestBuilder, Option<String>) {
     let mut request_builder = match config.request.method.as_deref() {
         Some("POST") => client.post(url),
         _ => client.get(url),
     };
+    let body = config.request.body.clone().unwrap_or_else(|| "".to_string());
+    let replaced_body = replace_special_strings(body.as_str(), counter);
 
-    if let Some(body) = &config.request.body {
-        let replaced_body = replace_special_strings(body, counter);
-        request_builder = request_builder.body(replaced_body);
-    }
 
     if let Some(headers) = &config.request.headers {
         let mut header_map = HeaderMap::new();
@@ -131,23 +136,29 @@ fn build_request(
         request_builder = request_builder.headers(header_map);
     }
 
-    request_builder
+    (request_builder, Some(replaced_body.clone()))
 }
 
 async fn handle_response(
-    response: Result<reqwest::Response, reqwest::Error>,
+    response: Result<reqwest::Response, reqwest::Error>,request_body: Option<String>,
     start_time: Instant,
     timings: &Arc<Mutex<Vec<BenchResult>>>,
 ) {
     match response {
         Ok(res) => {
             let elapsed = start_time.elapsed().as_millis();
+            let url = res.url().to_string();
+            let status_code = Some(res.status().as_u16());
+            let total_transfer = res.content_length().unwrap_or(0);
+            let post_body = request_body;
             let mut timings = timings.lock().unwrap();
             timings.push(BenchResult {
+                url, // URLを保存
+                post_body, // POSTボディを保存
                 start_time: start_time.clone(),
-                status_code: Some(res.status().as_u16()), // ステータスコードを保存
+                status_code, // ステータスコードを保存
                 elapsed_time: elapsed,
-                total_transfer: res.content_length().unwrap_or(0), // コンテンツ長を保存
+                total_transfer, // コンテンツ長を保存
                 is_error: false,
             });
         }
@@ -155,6 +166,8 @@ async fn handle_response(
             let elapsed = start_time.elapsed().as_millis();
             let mut timings = timings.lock().unwrap();
             timings.push(BenchResult {
+                url: "".to_string(), // URLを保存
+                post_body: None, // POSTボディを保存
                 start_time: start_time.clone(),
                 status_code: e.status().map(|x| x.as_u16()), // エラーステータスコードを保存
                 elapsed_time: elapsed,
@@ -240,6 +253,8 @@ pub fn generate_random_number_string(length: usize, rng: &mut impl Rng) -> Strin
 }
 
 struct BenchResult {
+    url: String,
+    post_body: Option<String>,
     start_time: Instant,
     status_code: Option<u16>,
     elapsed_time: u128,
@@ -259,7 +274,6 @@ struct StatisticsData {
     status_4xx_count: usize,
     status_5xx_count: usize,
     mean: f64,
-    variance: f64,
     std_dev: f64,
     under_10ms_count: usize,
     _10_to_100ms_count: usize,
@@ -340,7 +354,6 @@ impl<'a> From<MutexGuard<'a, Vec<BenchResult>>> for StatisticsData {
             status_4xx_count,
             status_5xx_count,
             mean,
-            variance,
             std_dev,
             under_10ms_count,
             _10_to_100ms_count,
@@ -364,7 +377,10 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
     println!(
         "{:<22} {}",
         "Total Transfer:",
-        style_text(format!("{} Bytes", stats.total_transfer))
+        style_text(format!(
+            "{} Bytes",
+            stats.total_transfer.to_string().chars().rev().collect::<Vec<_>>().chunks(3).map(|chunk| chunk.iter().collect::<String>()).collect::<Vec<_>>().join(",").chars().rev().collect::<String>()
+        ))
     );
     println!(
         "{:<22} {}",
@@ -381,7 +397,7 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
         "Bandwidth:",
         style_text(format!(
             "{:.2} Mbps",
-            (stats.total_transfer as f64 * 8.0) / (stats.total_time as f64 * 1000000.0)
+            (stats.total_transfer as f64 * 8.0) / (stats.total_time as f64 * 1000.0)
         ))
     );
     println!(
@@ -499,4 +515,22 @@ fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
 
 fn style_text<T: std::fmt::Display>(text: T) -> String {
     format!("\x1b[1;32m{}\x1b[0m", text) // 緑色で強調表示
+}
+
+fn write_to_csv(path: &str, timings_data: &Vec<BenchResult>) -> Result<(), Box<dyn Error>> {
+    let mut file = File::create(path)?;
+    writeln!(file, "URL,Status Code,Is Error,Elapsed Time,Total Transfer")?;
+    for timing in timings_data {
+        writeln!(
+            file,
+            "\"{}\",\"{}\",{},{},{},{}",
+            timing.url,
+            timing.post_body.as_deref().unwrap_or(""),
+            timing.status_code.unwrap_or(0),
+            timing.is_error,
+            timing.elapsed_time,
+            timing.total_transfer
+        )?;
+    }
+    Ok(())
 }
