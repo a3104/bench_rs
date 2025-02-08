@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
 
-    use crate::json_benchmark::{
+    use crate::json_benchmark::request::replace_special_strings;
+    use crate::json_benchmark::utils::{
         generate_random_number_string, generate_random_string, replace_random_strings,
-        replace_special_strings,
     };
     use rand::thread_rng;
 

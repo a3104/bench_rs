@@ -1,8 +1,8 @@
 mod client;
-mod request;
-mod response;
-mod statistics;
-mod utils;
+pub mod request;
+pub mod response;
+pub mod statistics;
+pub mod utils;
 
 use client::build_client;
 use request::{build_request, replace_special_strings};
@@ -28,7 +28,7 @@ struct RequestConfig {
 }
 
 #[derive(Deserialize, Debug)]
-struct BenchmarkConfig {
+pub(crate) struct BenchmarkConfig {
     total_requests: usize,    // 総リクエスト数
     concurrent_access: usize, // 同時アクセス数
     logging: Option<String>,  // ログ出力先
@@ -101,7 +101,7 @@ pub async fn run_json_benchmark(config_json: &str) -> Result<(), Box<dyn Error>>
     Ok(())
 }
 
-struct BenchResult {
+pub(crate) struct BenchResult {
     url: String,
     post_body: Option<String>,
     start_time: Instant,

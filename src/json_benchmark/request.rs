@@ -11,7 +11,7 @@ use super::utils::generate_random_string;
 use super::utils::replace_random_strings;
 use super::BenchmarkConfig;
 
-pub fn build_request(client: &Client, config: &BenchmarkConfig, url: &str, cnt: usize) -> (RequestBuilder, Option<String>) {
+pub(crate) fn build_request(client: &Client, config: &BenchmarkConfig, url: &str, cnt: usize) -> (RequestBuilder, Option<String>) {
     let mut request_builder = match config.request.method.as_deref() {
         Some("POST") => client.post(url),
         _ => client.get(url),

@@ -5,7 +5,6 @@ use super::BenchResult;
 pub struct StatisticsData {
     total_requests: usize,
     total_transfer: u64,
-    total_time: u128,
     rps: f64,
     mean: f64,
     std_dev: f64,
@@ -50,7 +49,6 @@ impl From<MutexGuard<'_, Vec<BenchResult>>> for StatisticsData {
         StatisticsData {
             total_requests,
             total_transfer,
-            total_time,
             rps,
             mean,
             std_dev,
@@ -75,7 +73,7 @@ fn style_text<T: std::fmt::Display>(text: T) -> String {
     format!("\x1b[1;32m{}\x1b[0m", text)
 }
 
-pub fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
+pub(crate) fn print_statistics(timings_data: MutexGuard<Vec<BenchResult>>) {
     let min_start_time = timings_data.iter().map(|t| t.start_time).min().unwrap_or_else(|| std::time::Instant::now());
     let total_time = min_start_time.elapsed().as_millis();
     let stats = StatisticsData::from(timings_data);

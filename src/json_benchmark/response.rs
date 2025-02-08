@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use super::BenchResult;
 
-pub async fn handle_response(response: Result<Response, reqwest::Error>, body: Option<String>, start_time: Instant, timings: &Arc<Mutex<Vec<BenchResult>>>) {
+pub(crate) async fn handle_response(response: Result<Response, reqwest::Error>, body: Option<String>, start_time: Instant, timings: &Arc<Mutex<Vec<BenchResult>>>) {
     let elapsed_time = start_time.elapsed().as_millis();
     let mut bench_result = BenchResult {
         url: response.as_ref().map(|r| r.url().to_string()).unwrap_or_default(),
