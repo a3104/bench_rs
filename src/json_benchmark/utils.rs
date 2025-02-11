@@ -1,5 +1,4 @@
-use rand::distributions::Alphanumeric;
-use rand::Rng;
+use rand::{distr::Alphanumeric, Rng};
 use uuid::Uuid;
 
 pub fn generate_luid() -> String {

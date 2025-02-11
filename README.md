@@ -99,7 +99,7 @@ To use `json_bench`, you need a configuration file in JSON format as shown below
 
 ### Special Variables
 
-You can use special variables in the `url` field to dynamically generate parts of the URL:
+You can use special variables in the `url`, `post body`, `header` field to dynamically generate parts of the request:
 
 - `$CNT`: Replaced with the current request count.
 - `$RND(n)`: Replaced with a random alphanumeric string of length `n`.
@@ -124,6 +124,66 @@ Example:
   }
 }
 ```
+
+### Logging Configuration Example
+
+To enable logging, add the "logging" field to your JSON configuration:
+
+```json
+{
+  "total_requests": 1000,
+  "concurrent_access": 10,
+  "logging": "benchmark_results.csv",
+  "request": {
+    "url": "http://example.com",
+    "headers": {
+      "Authorization": "Bearer YOUR_TOKEN"
+    }
+  }
+}
+```
+
+### Error Handling
+
+The tool handles various types of errors and includes them in the statistics:
+- Network connectivity issues
+- Timeout errors
+- Invalid response formats
+- Server errors (5xx status codes)
+- Client errors (4xx status codes)
+
+All errors are counted and displayed in the final statistics output.
+
+### Response Time Distribution
+
+The tool provides detailed response time distribution in these ranges:
+- Under 10ms
+- 10ms to 100ms
+- 100ms to 200ms
+- 200ms to 500ms
+- 500ms to 1000ms
+- 1000ms to 10000ms
+- Over 10000ms
+
+This helps in analyzing the performance characteristics of your API.
+
+### Command-line Mode vs JSON Mode
+
+The tool supports two modes of operation:
+
+1. Simple Command-line Mode:
+   ```bash
+   cargo run "http://example.com" 10 100
+   ```
+   This mode is more suitable for quick tests with basic parameters.
+
+2. JSON Configuration Mode:
+   ```bash
+   cargo run json config.json
+   ```
+   This mode offers more features like custom headers, HTTP methods, logging, and special variables.
+
+Choose the mode that best fits your testing needs.
 
 After creating the configuration file, run the program as follows:
 
