@@ -40,7 +40,7 @@ pub fn replace_special_strings(url: &str, cnt: usize) -> String {
     let luid = generate_luid();
     let mut replaced_url = url.replace("$CNT", &cnt.to_string()); // $CNTをカウンター値に置換
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     replaced_url =
         replace_random_strings(&replaced_url, &mut rng, "$RND(", &generate_random_string);
     replaced_url = replace_random_strings(

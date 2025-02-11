@@ -6,11 +6,11 @@ pub fn generate_luid() -> String {
 }
 
 pub fn generate_random_hex_string(len: usize, rng: &mut impl Rng) -> String {
-    (0..len).map(|_| format!("{:x}", rng.gen_range(0..16))).collect::<String>()
+    (0..len).map(|_| format!("{:x}", rng.random_range(0..16))).collect::<String>()
 }
 
 pub fn generate_random_number_string(len: usize, rng: &mut impl Rng) -> String {
-    (0..len).map(|_| rng.gen_range(0..10).to_string()).collect::<String>()
+    (0..len).map(|_| rng.random_range(0..10).to_string()).collect::<String>()
 }
 
 pub fn generate_random_string(len: usize, rng: &mut impl Rng) -> String {
