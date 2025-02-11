@@ -5,7 +5,7 @@ mod tests {
     use crate::json_benchmark::utils::{
         generate_random_number_string, generate_random_string, replace_random_strings,
     };
-    use rand::thread_rng;
+    use rand::rng;
 
     #[test]
     fn test_replace_special_strings() {
@@ -31,7 +31,7 @@ mod tests {
 
     #[test]
     fn test_generate_random_string() {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let random_string = generate_random_string(10, &mut rng);
         assert_eq!(random_string.len(), 10);
         assert!(random_string.chars().all(|c| c.is_alphanumeric()));
@@ -39,7 +39,7 @@ mod tests {
 
     #[test]
     fn test_generate_random_number_string() {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let random_number_string = generate_random_number_string(5, &mut rng);
         assert_eq!(random_number_string.len(), 5);
         assert!(random_number_string.chars().all(|c| c.is_digit(10)));
@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn test_replace_random_strings() {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let url = "http://example.com/$RND(4)";
         let result = replace_random_strings(url, &mut rng, "$RND(", &generate_random_string);
         println!("{}", &result);
